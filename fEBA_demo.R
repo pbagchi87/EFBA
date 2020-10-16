@@ -1,0 +1,192 @@
+rm(list=ls())
+library(fda)
+library(fields)
+library(viridis)
+
+#set working directory to folder containing the following files
+# 1) fEBAccp_1.0.tar.gz
+# 2) fEBA_Rfns.R
+
+setwd("~/path/to/files");
+
+#first, install the fEBAcpp package from source file: fEBAcpp_1.0.tar.gz
+#install.packages("fEBAcpp_1.0.tar.gz", repos = NULL, type="source");
+
+#make libraries available
+library(fEBAcpp);
+
+#source additional R functions
+source('fEBA_Rfns.R');
+
+
+######################################
+## Setting 1: Functional White Noise
+######################################
+
+##simulate functional white noise
+
+#input parameters
+nb=15; #number of basis functions used to generate white noise
+R=5; #number of points in functional domain
+Ts=2000; #length of time series
+seed=234; #seed for reproducibility
+
+X=fws.sim(nb=nb,gsz=R,Ts=Ts,seed=seed);
+
+##estimate and visualize power spectrum estimates for specific components
+B=5; #number of time blocks
+N=Ts/B; #number of observations per time block
+bw=0.04; #bandwidth for multitaper spectral estimator
+K=max(1,floor(bw*(N+1)-1)); #number of tapers for multitaper spectral estimator
+std=FALSE; #standardize variance for points in functional domain (TRUE) or not (FALSE)
+freq=seq(from=0,by=1/N,length.out=floor(N/2)+1); #Fourier frequencies
+Rsel=4; #number of points in functional domain used for test statistics
+pse=fhat(X,N,K,Rsel,std);
+
+cmpnt="1-1"; #select component to view
+dimnames(pse) <- list(freq,apply(expand.grid(1:Rsel,1:Rsel),1,paste,collapse = "-"),1:B);
+image.plot(x=(1:B)*(Ts/B),y=as.numeric(rownames(pse)),z=t(Re(pse[,cmpnt,])), 
+           axes = TRUE, col = inferno(256), 
+           main = 'Multitaper Autospectrum',xlab='Time',ylab='Hz',xaxs="i"); 
+
+
+##run fEBA algorithm
+
+#input parameters
+set.seed(47)
+ndraw=100000; #number of draws from Gaussian process for approximating p-values
+blockdiag=TRUE; #use block diagonal covariance matrix approximation
+dcap=40; #max number of frequencies tested in a given pass 
+alpha=0.05/ceiling((1-2*bw/0.5)*(floor(N/2)+1)/dcap); #alpha with Bonferroni correction
+
+run.wn <- fEBA.wrapper(X,Rsel,K,N,ndraw,alpha,std,blockdiag,dcap);
+print(run.wn$summary);
+
+##View test statistics and p-values over frequencies
+tmp=cbind(as.numeric(unlist(lapply(run.wn$log, function(x) rownames(x$Qint)))),
+          unlist(lapply(run.wn$log, function(x) x$Qint)),
+          unlist(lapply(run.wn$log, function(x) x$Qpv[,'Qint'])));
+tmp=tmp[!duplicated(tmp[,1]),];
+
+plot(tmp[,1],tmp[,2],
+     type="l",xlab='Hz',ylab='Qint');
+plot(tmp[,1],tmp[,3],
+     type="l",xlab='Hz',ylab='p-value',ylim=c(0,1));
+
+######################################
+## Setting 2: Nonstationary 3 Band (Linear)
+######################################
+
+##three frequency bands
+#(0,0.15]
+#(0.15,0.35]
+#(0.35,0.5]
+
+##simulate nonstationary 3 band linear
+
+#input parameters
+nb=15; #number of basis functions used to generate white noise
+R=5; #number of points in functional domain
+Ts=2000; #length of time series
+seed=634; #seed for reproducibility
+
+X=f3bL.sim(nb=nb,gsz=R,Ts=Ts,seed=seed);
+
+##estimate and visualize power spectrum estimates for specific components
+B=5; #number of time blocks
+N=Ts/B; #number of observations per time block
+bw=0.04; #bandwidth for multitaper spectral estimator
+K=max(1,floor(bw*(N+1)-1)); #number of tapers for multitaper spectral estimator
+std=FALSE; #standardize variance for points in functional domain (TRUE) or not (FALSE)
+freq=seq(from=0,by=1/N,length.out=floor(N/2)+1); #Fourier frequencies
+Rsel=4; #number of points in functional domain used for test statistics
+pse=fhat(X,N,K,Rsel,std);
+
+cmpnt="1-1"; #select component to view
+dimnames(pse) <- list(freq,apply(expand.grid(1:Rsel,1:Rsel),1,paste,collapse = "-"),1:B);
+image.plot(x=(1:B)*(Ts/B),y=as.numeric(rownames(pse)),z=t(Re(pse[,cmpnt,])), 
+           axes = TRUE, col = inferno(256), 
+           main = 'Multitaper Autospectrum',xlab='Time',ylab='Hz',xaxs="i"); 
+
+
+##run fEBA algorithm
+
+#input parameters
+set.seed(734)
+ndraw=100000; #number of draws from Gaussian process for approximating p-values
+blockdiag=TRUE; #use block diagonal covariance matrix approximation
+dcap=40; #max number of frequencies tested in a given pass 
+alpha=0.05/ceiling((1-2*bw/0.5)*(floor(N/2)+1)/dcap); #alpha with Bonferroni correction
+
+run.3bL <- fEBA.wrapper(X,Rsel,K,N,ndraw,alpha,std,blockdiag,dcap);
+print(run.3bL$summary);
+
+##View test statistics and p-values over frequencies
+tmp=cbind(as.numeric(unlist(lapply(run.3bL$log, function(x) rownames(x$Qint)))),
+      unlist(lapply(run.3bL$log, function(x) x$Qint)),
+      unlist(lapply(run.3bL$log, function(x) x$Qpv[,'Qint'])));
+tmp=tmp[!duplicated(tmp[,1]),];
+
+plot(tmp[,1],tmp[,2],
+     type="l",xlab='Hz',ylab='Qint');
+plot(tmp[,1],tmp[,3],
+     type="l",xlab='Hz',ylab='p-value',ylim=c(0,1));
+
+######################################
+## Setting 3: Nonstationary 3 Band (Sinusoidal)
+######################################
+
+##three frequency bands
+#(0,0.15]
+#(0.15,0.35]
+#(0.35,0.5]
+
+##simulate nonstationary 3 band sinusoidal
+
+#input parameters
+nb=15; #number of basis functions used to generate white noise
+R=5; #number of points in functional domain
+Ts=4000; #length of time series
+seed=123; #seed for reproducibility
+
+X=f3bS.sim(nb=nb,gsz=R,Ts=Ts,seed=seed);
+
+##estimate and visualize power spectrum estimates for specific components
+B=10; #number of time blocks
+N=Ts/B; #number of observations per time block
+bw=0.04; #bandwidth for multitaper spectral estimator
+K=max(1,floor(bw*(N+1)-1)); #number of tapers for multitaper spectral estimator
+std=FALSE; #standardize variance for points in functional domain (TRUE) or not (FALSE)
+freq=seq(from=0,by=1/N,length.out=floor(N/2)+1); #Fourier frequencies
+Rsel=4; #number of points in functional domain used for test statistics
+pse=fhat(X,N,K,Rsel,std);
+
+cmpnt="1-1"; #select component to view
+dimnames(pse) <- list(freq,apply(expand.grid(1:Rsel,1:Rsel),1,paste,collapse = "-"),1:B);
+image.plot(x=(1:B)*(Ts/B),y=as.numeric(rownames(pse)),z=t(Re(pse[,cmpnt,])), 
+           axes = TRUE, col = inferno(256), 
+           main = 'Multitaper Autospectrum',xlab='Time',ylab='Hz',xaxs="i"); 
+
+
+##run fEBA algorithm
+
+#input parameters
+set.seed(435)
+ndraw=100000; #number of draws from Gaussian process for approximating p-values
+blockdiag=TRUE; #use block diagonal covariance matrix approximation
+dcap=40; #max number of frequencies tested in a given pass 
+alpha=0.05/ceiling((1-2*bw/0.5)*(floor(N/2)+1)/dcap); #alpha with Bonferroni correction
+
+run.3bS <- fEBA.wrapper(X,Rsel,K,N,ndraw,alpha,std,blockdiag,dcap);
+print(run.3bS$summary);
+
+##View test statistics and p-values over frequencies
+tmp=cbind(as.numeric(unlist(lapply(run.3bS$log, function(x) rownames(x$Qint)))),
+          unlist(lapply(run.3bS$log, function(x) x$Qint)),
+          unlist(lapply(run.3bS$log, function(x) x$Qpv[,'Qint'])));
+tmp=tmp[!duplicated(tmp[,1]),];
+
+plot(tmp[,1],tmp[,2],
+     type="l",xlab='Hz',ylab='Qint');
+plot(tmp[,1],tmp[,3],
+     type="l",xlab='Hz',ylab='p-value',ylim=c(0,1))
